@@ -34,7 +34,7 @@ function kssh() {
 	fi
 }
 
-source /home/mool/InVision/kubernetes-coreos/cli/setup.sh
+source ~/InVision/kubernetes-coreos/cli/setup.sh
 
 # Required for all commands
 export LOGGLY_CUSTOMER_TOKEN=***REMOVED***
