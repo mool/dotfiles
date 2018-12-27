@@ -9,7 +9,7 @@
   ls = ls-files
   l = log --decorate --stat --graph --pretty=format:'%C(yellow)%h%Creset (%aD - %ar - %Cred%an%Creset), %s%n'
   ll = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative
-  gh = "!xdg-open `git remote -v | awk '/fetch/{print $2}' | sed -Ee 's#(git@|git://)#http://#' -e 's@com:@com/@'`"
+  gh = "!open `git remote -v | awk '/fetch/{print $2}' | sed -Ee 's#(git@|git://)#http://#' -e 's@com:@com/@'`"
   recent = for-each-ref --sort=committerdate refs/heads/ --format=' %(color:blue) %(authorname) %(color:yellow)%(refname:short)%(color:reset)'
   cleanup = "!git branch --merged | grep -v '\\*\\|master' | xargs git branch -d"
 
