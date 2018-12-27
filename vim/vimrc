@@ -8,7 +8,8 @@ set shiftwidth=2
 set expandtab
 set nofoldenable
 set number
-" set clipboard=unnamed
+set clipboard=unnamed
+set backspace=indent,eol,start
 
 let mapleader = ','
 
