@@ -1,2 +1,6 @@
+# Homebrew
+Brewfile.lock.json
+
+# ViM
 vim/.vim/.netrwhist
 vim/.vim/plugged
