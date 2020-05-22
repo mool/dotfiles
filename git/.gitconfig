@@ -2,6 +2,9 @@
   name = Pablo Gutiérrez del Castillo
   email = pablogutierrezdelc@gmail.com
 
+[core]
+	excludesfile = /Users/mool/.gitignore_global
+
 [alias]
   hist = log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
   lol = log --graph --decorate --pretty=oneline --abbrev-commit

@@ -1,2 +1,9 @@
-vim/.netrwhist
-vim/plugged
+# Homebrew
+Brewfile.lock.json
+
+# Secrets
+secrets.zsh
+
+# ViM
+vim/.vim/.netrwhist
+vim/.vim/plugged
