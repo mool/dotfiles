@@ -1,7 +1,7 @@
 window:
   padding:
-    x: 3
-    y: 3
+    x: 2
+    y: 2
   decorations: buttonless
 
 background_opacity: 0.99
