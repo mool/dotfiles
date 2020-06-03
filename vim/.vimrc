@@ -1,16 +1,21 @@
 source ~/.vim/plugins.vim
 
+syntax on
 filetype plugin on
 
 colorscheme palenight
 set background=dark
 
 set laststatus=2
-set tabstop=2
+set tabstop=2 softtabstop=2
 set shiftwidth=2
 set expandtab
+set smartindent
+set smartcase
+set nowrap
 set nofoldenable
 set number
+set incsearch
 set clipboard=unnamed
 set backspace=indent,eol,start
 
