@@ -4,7 +4,7 @@
 
 [core]
   excludesfile = /Users/mool/.gitignore_global
-  pager = diff-so-fancy | less --tabs=4 -RFX
+  pager = diff-so-fancy | less --tabs=4 -RX
 
 [alias]
   hist = log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
