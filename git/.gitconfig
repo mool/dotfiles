@@ -43,3 +43,6 @@
 [diff-so-fancy]
   markEmptyLines = false
   stripLeadingSymbols = false
+
+[url "git@github.com:"]
+  insteadOf = https://github.com/
