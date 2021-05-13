@@ -19,6 +19,29 @@ set incsearch
 set clipboard=unnamed
 set backspace=indent,eol,start
 
+" Some servers have issues with backup files, see #649.
+set nobackup
+set nowritebackup
+
+" Give more space for displaying messages.
+set cmdheight=2
+
+" Having longer updatetime (default is 4000 ms = 4 s) leads to noticeable
+" delays and poor user experience.
+set updatetime=300
+
+" Don't pass messages to |ins-completion-menu|.
+set shortmess+=c
+
+" Always show the signcolumn, otherwise it would shift the text each time
+" diagnostics appear/become resolved.
+if has("patch-8.1.1564")
+  " Recently vim can merge signcolumn and number column into one
+  set signcolumn=number
+else
+  set signcolumn=yes
+endif
+
 let mapleader = ','
 
 nnoremap <silent> <leader> :WhichKey ','<CR>
@@ -46,6 +69,9 @@ nmap <silent> gr <Plug>(coc-references)
 " terraform-vim config
 let g:terraform_fmt_on_save=1
 
+" vim-jsonnet config
+let g:jsonnet_fmt_on_save = 1
+
 " NERDTree config
 let g:NERDSpaceDelims = 1
 let g:NERDCompactSexyComs = 1
@@ -53,9 +79,15 @@ let g:NERDDefaultAlign = 'left'
 let NERDTreeIgnore=['\.pyc$', '\.pyo$', '\.rbc$', '\.rbo$', '\.class$', '\.o$', '\~$']
 map <C-n> :NERDTreeToggle<CR>
 
+" argwrap config
+nnoremap <silent> <leader>a :ArgWrap<CR>
+
 " EasAlign config
 nmap ga <Plug>(EasyAlign)
 xmap ga <Plug>(EasyAlign)
+
+" SnipMate config
+let g:snipMate = { 'snippet_version' : 1 }
 
 " FuzzyFinder config
 command! -bang -nargs=* Find call fzf#vim#grep('rg --column --line-number --no-heading --fixed-strings --ignore-case --no-ignore --hidden --follow --glob "!.git/*" --color "always" '.shellescape(<q-args>), 1, <bang>0)
