@@ -12,3 +12,10 @@ stow tmux
 stow vim
 stow zsh
 ```
+
+### tmux
+
+Install TPM
+```
+git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+```
