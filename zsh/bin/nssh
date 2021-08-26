@@ -1,0 +1,8 @@
+#!/usr/bin/expect -f
+
+set host [lindex $argv 0]
+
+spawn ssh admin@$host -L 8080:192.168.1.2:80 -L 8081:192.168.0.1:80
+expect "assword:"
+send "$env(NETLINK_CPE_PASSWORD)\r"
+interact

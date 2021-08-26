@@ -9,7 +9,7 @@ export EDITOR='vim'
 export AWS_PAGER=""
 
 # Paths
-export PATH="/usr/local/sbin:$PATH"
+export PATH="$HOME/bin:/usr/local/sbin:$PATH"
 
 # Antibody
 export ZSH="$(antibody home)/https-COLON--SLASH--SLASH-github.com-SLASH-ohmyzsh-SLASH-ohmyzsh"
