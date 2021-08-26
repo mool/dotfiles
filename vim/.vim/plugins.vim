@@ -26,6 +26,7 @@ Plug 'scrooloose/nerdcommenter'
 Plug 'scrooloose/nerdtree', { 'on':  'NERDTreeToggle' }
 Plug 'sudar/vim-arduino-syntax'
 Plug 'sudar/vim-arduino-snippets'
+Plug 'towolf/vim-helm'
 Plug 'tpope/vim-endwise'
 Plug 'tpope/vim-eunuch'
 Plug 'tpope/vim-fugitive'
