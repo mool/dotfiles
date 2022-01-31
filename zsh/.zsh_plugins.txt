@@ -4,7 +4,7 @@ ohmyzsh/ohmyzsh path:plugins/docker
 ohmyzsh/ohmyzsh path:plugins/docker-compose
 ohmyzsh/ohmyzsh path:plugins/git
 ohmyzsh/ohmyzsh path:plugins/kubectl
-ohmyzsh/ohmyzsh path:plugins/osx
+ohmyzsh/ohmyzsh path:plugins/macos
 ohmyzsh/ohmyzsh path:plugins/terraform
 
 denysdovhan/spaceship-prompt
