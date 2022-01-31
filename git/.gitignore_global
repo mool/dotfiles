@@ -3,6 +3,3 @@
 
 # ViM swap file
 *.swp
-
-# direnv config files
-.envrc
