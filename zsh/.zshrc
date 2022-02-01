@@ -8,6 +8,9 @@ export AWS_PAGER=""
 # Paths
 export PATH="$HOME/bin:/usr/local/sbin:$PATH"
 
+# Set prompt config before loading the theme
+source $DOTFILES/zsh/lib/spaceship-prompt.zsh
+
 # Antigen
 source /usr/local/share/antigen/antigen.zsh
 antigen init $DOTFILES/zsh/.antigenrc
