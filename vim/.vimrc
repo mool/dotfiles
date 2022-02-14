@@ -66,6 +66,9 @@ nmap <silent> gy <Plug>(coc-type-definition)
 nmap <silent> gi <Plug>(coc-implementation)
 nmap <silent> gr <Plug>(coc-references)
 
+" Enable spell for markdown files
+autocmd FileType markdown setlocal spell
+
 " terraform-vim config
 let g:terraform_fmt_on_save=1
 
