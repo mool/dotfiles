@@ -1,10 +1,9 @@
 window:
+  decorations: buttonless
+  opacity: 0.99
   padding:
     x: 2
     y: 2
-  decorations: buttonless
-
-background_opacity: 0.99
 
 colors:
   # Default colors
@@ -69,7 +68,7 @@ key_bindings:
   - { key: Right,  mods: Alt,             chars: "\x1Bf" }
   - { key: Key0,   mods: Command,         action: ResetFontSize    }
   - { key: Equals, mods: Command,         action: IncreaseFontSize }
-  - { key: Add,    mods: Command,         action: IncreaseFontSize }
+  - { key: Plus,   mods: Command,         action: IncreaseFontSize }
   - { key: Minus,  mods: Command,         action: DecreaseFontSize }
   - { key: H,      mods: Command,         action: Hide             }
   - { key: M,      mods: Command,         action: Minimize         }
