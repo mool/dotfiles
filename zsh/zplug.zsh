@@ -1,6 +1,7 @@
 export ZPLUG_HOME=$(brew --prefix zplug)
 source $ZPLUG_HOME/init.zsh
 
+zplug "lib/completion",          from:oh-my-zsh
 zplug "lib/directories",          from:oh-my-zsh
 zplug "lib/grep",                 from:oh-my-zsh
 zplug "lib/history",              from:oh-my-zsh
@@ -15,7 +16,7 @@ zplug "plugins/kubectl",        from:oh-my-zsh
 zplug "plugins/macos",          from:oh-my-zsh
 zplug "plugins/terraform",      from:oh-my-zsh
 
-zplug "zsh-users/zsh-completions",         from:github
+# zplug "zsh-users/zsh-completions",         from:github
 zplug "zsh-users/zsh-syntax-highlighting", from:github, defer:3
 
 # Let zplug manage zplug
