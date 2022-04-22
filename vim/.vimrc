@@ -71,6 +71,7 @@ autocmd FileType markdown setlocal spell
 
 " terraform-vim config
 let g:terraform_fmt_on_save=1
+let g:hcl_fmt_autosave=1
 
 " vim-jsonnet config
 let g:jsonnet_fmt_on_save = 1
