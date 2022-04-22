@@ -12,6 +12,7 @@ zplug "plugins/aws",            from:oh-my-zsh
 zplug "plugins/docker",         from:oh-my-zsh
 zplug "plugins/docker-compose", from:oh-my-zsh
 zplug "plugins/git",            from:oh-my-zsh
+zplug "plugins/helm",           from:oh-my-zsh
 zplug "plugins/kubectl",        from:oh-my-zsh
 zplug "plugins/macos",          from:oh-my-zsh
 zplug "plugins/terraform",      from:oh-my-zsh
