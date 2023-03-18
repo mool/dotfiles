@@ -1,6 +1,7 @@
 [user]
   name = Pablo Gutiérrez del Castillo
   email = pablogutierrezdelc@gmail.com
+  signingkey = 9C781E902ACBCB30E87D0379CD82D3B7C810023F
 
 [core]
   excludesfile = /Users/mool/.gitignore_global
@@ -17,6 +18,7 @@
   gh = "!open `git remote -v | awk '/fetch/{print $2}' | sed -Ee 's#(git@|org.*@|git://)#http://#' -e 's#com:#com/#' -e 's#.git$##'`"
   recent = for-each-ref --sort=committerdate refs/heads/ --format=' %(color:blue) %(authorname) %(color:yellow)%(refname:short)%(color:reset)'
   cleanup = "!git branch --merged | grep -v '\\*\\|master' | xargs git branch -d"
+  delete-squashed = "!f() { local targetBranch=${1:-master} && git checkout -q $targetBranch && git branch --merged | grep -v \"\\*\" | xargs -n 1 git branch -d && git for-each-ref refs/heads/ \"--format=%(refname:short)\" | while read branch; do mergeBase=$(git merge-base $targetBranch $branch) && [[ $(git cherry $targetBranch $(git commit-tree $(git rev-parse $branch^{tree}) -p $mergeBase -m _)) == \"-\"* ]] && git branch -D $branch; done; }; f"
 
 [push]
   default = current
@@ -47,6 +49,10 @@
 
 [url "git@github.com:"]
   insteadOf = https://github.com/
+  insteadOf = git://github.com/
 
 [init]
   defaultBranch = master
+
+[commit]
+  gpgsign = true
