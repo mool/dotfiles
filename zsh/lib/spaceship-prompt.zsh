@@ -10,10 +10,9 @@ SPACESHIP_PROMPT_ORDER=(
   ruby
   golang
   aws
-  venv
-  pyenv
   terraform
   exec_time
+  async
   line_sep
   jobs
   exit_code
