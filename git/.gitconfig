@@ -19,6 +19,9 @@
   recent = for-each-ref --sort=committerdate refs/heads/ --format=' %(color:blue) %(authorname) %(color:yellow)%(refname:short)%(color:reset)'
   cleanup = "!git branch --merged | grep -v '\\*\\|master' | xargs git branch -d"
   delete-squashed = "!f() { local targetBranch=${1:-master} && git checkout -q $targetBranch && git branch --merged | grep -v \"\\*\" | xargs -n 1 git branch -d && git for-each-ref refs/heads/ \"--format=%(refname:short)\" | while read branch; do mergeBase=$(git merge-base $targetBranch $branch) && [[ $(git cherry $targetBranch $(git commit-tree $(git rev-parse $branch^{tree}) -p $mergeBase -m _)) == \"-\"* ]] && git branch -D $branch; done; }; f"
+  mb = "!git branch -r | grep 'HEAD ->' | awk -F'/' '{print $3}'"
+  prm = "!git pull --rebase origin $(git mb)"
+  com = "!git checkout $(git mb)"
 
 [push]
   default = current
