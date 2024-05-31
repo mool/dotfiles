@@ -3,6 +3,10 @@ function gpc() {
 }
 
 function gpdel() {
-  main_branch=${1:-master}
+  main_branch=$(git mb)
   git pull && git delete-squashed $main_branch
+}
+
+function gcom() {
+  git checkout $(git mb)
 }
