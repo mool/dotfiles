@@ -28,7 +28,6 @@ return {
 			-- list of servers for mason to install
 			ensure_installed = {
 				"bashls",
-				"dagger",
 				"docker_compose_language_service",
 				"golangci_lint_ls",
 				"gopls",
