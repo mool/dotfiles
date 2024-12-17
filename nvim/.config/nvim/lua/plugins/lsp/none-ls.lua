@@ -41,6 +41,7 @@ return {
 				}), -- js/ts formatter
 				-- formatting.beautysh,
 				formatting.black,
+				formatting.cue_fmt,
 				formatting.erb_format,
 				formatting.gofmt,
 				formatting.goimports,
