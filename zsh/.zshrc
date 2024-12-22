@@ -40,6 +40,7 @@ zinit snippet OMZ::lib/history.zsh
 zinit snippet OMZ::lib/key-bindings.zsh
 zinit snippet OMZ::lib/theme-and-appearance.zsh
 
+export SHOW_AWS_PROMPT=false
 zinit snippet OMZP::aws
 zinit snippet OMZP::docker
 zinit snippet OMZP::docker-compose

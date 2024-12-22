@@ -44,6 +44,10 @@ error_symbol = '[➜](bold red)'
 truncation_length = 10
 # truncation_symbol = '../'
 
+[kubernetes]
+disabled = false
+format = '[$symbol$context]($style) '
+
 [time]
 disabled = false
 format = '[\[ $time \]]($style) '
