@@ -1,0 +1,14 @@
+theme = Wombat
+font-family = SauceCodePro Nerd Font
+
+background = 232326
+background-opacity = 0.93
+background-blur-radius = 20
+
+cursor-style = block
+macos-option-as-alt = true
+macos-titlebar-style = hidden
+window-padding-balance = true
+window-padding-x = 5
+window-padding-y = 5
+window-save-state = always
