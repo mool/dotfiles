@@ -9,7 +9,7 @@ end
 -- Set filetype to helm when the file is in certain paths
 vim.api.nvim_create_autocmd({ "BufNewFile", "BufRead" }, {
 	group = augroup("set_filetype_of_helm"),
-	pattern = { "*/templates/*.yaml", "*/templates/*.tpl", "*.gotmpl", "helmfile*.yaml" },
+	pattern = { "*/templates/*.yaml", "*/templates/*.tpl", "*.gotmpl", "helmfile*.yaml", "*template*.yaml" },
 	callback = function()
 		vim.opt_local.filetype = "helm"
 	end,

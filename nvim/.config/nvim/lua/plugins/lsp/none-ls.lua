@@ -36,9 +36,7 @@ return {
 			sources = {
 				--  to disable file types use
 				--  "formatting.prettier.with({disabled_filetypes: {}})" (see null-ls docs)
-				formatting.prettier.with({
-					extra_filetypes = { "svelte" },
-				}), -- js/ts formatter
+				formatting.prettier, -- js/ts formatter
 				-- formatting.beautysh,
 				formatting.black,
 				formatting.cue_fmt,
@@ -50,9 +48,8 @@ return {
 				-- formatting.jq,
 				formatting.markdownlint,
 				formatting.stylua, -- lua formatter
-				formatting.terraform_fmt.with({
-					extra_filetypes = { "hcl" },
-				}),
+				formatting.terraform_fmt,
+				formatting.terragrunt_fmt,
 				diagnostics.pylint,
 				diagnostics.erb_lint,
 				diagnostics.golangci_lint,
