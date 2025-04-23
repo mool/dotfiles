@@ -3,3 +3,6 @@
 
 # ViM swap file
 *.swp
+
+# Test helm chart values
+test-values*.yaml
