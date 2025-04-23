@@ -1,8 +1,5 @@
 alias cdw="cd ~/Chainlink/"
 
-alias ecr-docker-login="aws ecr get-login-password --region us-west-2 --profile prod | docker login --username AWS --password-stdin --password-stdin 804282218731.dkr.ecr.us-west-2.amazonaws.com"
-alias ecr-helm-login="aws ecr get-login-password --region us-west-2 --profile prod | helm registry login --username AWS --password-stdin 804282218731.dkr.ecr.us-west-2.amazonaws.com"
-
 
 # AWS functions
 
@@ -33,6 +30,8 @@ function terminate-node() {
 }
 
 function ssm-session() {
+    # This depends on session-manager-plugin
+    # brew install session-manager-plugin
     profile=${1:?missing profile}
     node=${2:?missing node}
 

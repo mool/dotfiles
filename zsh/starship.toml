@@ -45,7 +45,7 @@ truncation_length = 10
 # truncation_symbol = '../'
 
 [kubernetes]
-disabled = false
+disabled = true
 format = '[$symbol$context]($style) '
 
 [time]
