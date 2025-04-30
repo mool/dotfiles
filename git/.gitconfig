@@ -25,10 +25,12 @@
   com = "!git checkout $(git mb)"
 
 [push]
-  default = current
+	default = simple
+	autoSetupRemote = true
 
 [branch]
   autosetuprebase = always
+	sort = -committerdate
 
 [color]
   ui = true
@@ -60,3 +62,12 @@
 
 [commit]
   gpgsign = true
+[diff]
+	algorithm = histogram
+	colorMoved = plain
+	mnemonicPrefix = true
+	renames = true
+[rebase]
+	autoStash = true
+[pull]
+	rebase = true
