@@ -12,4 +12,4 @@ mkdir -p ${SCREENSHOTS_PATH}
 defaults write com.apple.screencapture location -string "${SCREENSHOTS_PATH}"
 
 # Chrome Settings
-defaults write com.google.Chrome ExternalProtocolDialogShowAlwaysOpenCheckbox -bool true
+# defaults write com.google.Chrome ExternalProtocolDialogShowAlwaysOpenCheckbox -bool true
