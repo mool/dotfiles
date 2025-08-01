@@ -14,7 +14,7 @@ opt.autoindent = true -- copy indent from current line when starting new one
 opt.wrap = false -- disable line wrapping
 
 -- search settings
--- opt.ignorecase = true -- ignore case when searching
+opt.ignorecase = true -- ignore case when searching
 opt.smartcase = true -- if you include mixed case in your search, assumes you want case-sensitive
 
 -- cursor line
@@ -39,3 +39,9 @@ opt.splitright = true -- split vertical window to the right
 opt.splitbelow = true -- split horizontal window to the bottom
 
 -- opt.iskeyword:append("-") -- consider string-string as whole word
+
+vim.diagnostic.config({
+	float = {
+		border = "rounded", -- Use "rounded" for rounded borders
+	},
+})
