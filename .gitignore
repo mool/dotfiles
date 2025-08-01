@@ -1,6 +1,9 @@
 # Homebrew
 Brewfile.lock.json
 
+# NeoVim
+nvim/.config/nvim/lazy-lock.json
+
 # Secrets
 secrets.zsh
 
