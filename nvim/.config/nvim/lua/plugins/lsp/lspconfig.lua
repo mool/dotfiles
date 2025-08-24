@@ -76,12 +76,6 @@ return {
 			on_attach = on_attach,
 		})
 
-		-- configure dagger server
-		lspconfig["dagger"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
 		-- configure docker_compose_language_service server
 		lspconfig["docker_compose_language_service"].setup({
 			capabilities = capabilities,
@@ -96,12 +90,6 @@ return {
 
 		-- configure gopls server
 		lspconfig["gopls"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
-		-- configure html server
-		lspconfig["html"].setup({
 			capabilities = capabilities,
 			on_attach = on_attach,
 		})
@@ -149,38 +137,34 @@ return {
 			on_attach = on_attach,
 		})
 
-		-- local configs = require("lspconfig.configs")
-		-- local util = require("lspconfig.util")
-		-- if not configs.helm_ls then
-		--   configs.helm_ls = {
-		--     default_config = {
-		--       cmd = { "helm_ls", "serve" },
-		--       filetypes = { "helm" },
-		--       root_dir = function(fname)
-		--         return util.root_pattern("Chart.yaml")(fname)
-		--       end,
-		--     },
-		--   }
-		-- end
+		local yamlls_cfg = {
+			completion = true,
+			format = { enable = true },
+			keyOrdering = false,
+			validate = true,
+			schemaStore = {
+				enable = false,
+				url = "",
+			},
+		}
+
+		-- configure yamlls server
+		lspconfig["yamlls"].setup({
+			capabilities = capabilities,
+			on_attach = on_attach,
+			settings = { yaml = yamlls_cfg },
+		})
 
 		lspconfig["helm_ls"].setup({
 			capabilities = capabilities,
 			on_attach = on_attach,
-			filetypes = { "helm" },
-			cmd = { "helm_ls", "serve" },
+			settings = {
+				["helm-ls"] = {
+					yamlls = {
+						config = yamlls_cfg,
+					},
+				},
+			},
 		})
-
-		-- configure yamlls server
-		-- lspconfig["yamlls"].setup({
-		-- 	capabilities = capabilities,
-		-- 	on_attach = on_attach,
-		-- 	settings = {
-		-- 		yaml = {
-		-- 			completion = true,
-		-- 			keyOrdering = false,
-		-- 			validate = true,
-		-- 		},
-		-- 	},
-		-- })
 	end,
 }
