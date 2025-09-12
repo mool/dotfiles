@@ -17,13 +17,13 @@ return {
 		opt = false,
 		config = function()
 			vim.g["pencil#textwidth"] = 80
-			vim.g["pencil#wrapModeDefault"] = "hard"
+			vim.g["pencil#wrapModeDefault"] = "soft"
 
 			vim.api.nvim_create_autocmd("FileType", {
 				pattern = "markdown", -- applied to markdown files
 				callback = function()
 					vim.opt_local.spell = true -- turn on spellcheck
-					vim.cmd(":PencilHard") -- enable hard wrapping
+					vim.cmd(":PencilSoft") -- enable hard wrapping
 				end,
 			})
 		end,
