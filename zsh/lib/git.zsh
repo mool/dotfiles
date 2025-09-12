@@ -7,6 +7,10 @@ function gpdel() {
   git pull && git delete-squashed $main_branch
 }
 
+function gcob() {
+  git checkout $(git branch | fzf)
+}
+
 function gcom() {
   git checkout $(git mb)
 }
