@@ -10,6 +10,8 @@ defaults write com.apple.dock mru-spaces -bool false
 SCREENSHOTS_PATH=${HOME}/Desktop/screenshots
 mkdir -p ${SCREENSHOTS_PATH}
 defaults write com.apple.screencapture location -string "${SCREENSHOTS_PATH}"
+defaults write com.apple.screencapture location-last -string "${SCREENSHOTS_PATH}"
+defaults write com.apple.screencapture target -string "file"
 
 # Chrome Settings
 # defaults write com.google.Chrome ExternalProtocolDialogShowAlwaysOpenCheckbox -bool true
