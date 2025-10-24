@@ -1,0 +1,11 @@
+#!/bin/bash
+
+profile="${1:?Usage: $0 <profile>}"
+region="${2:-us-west-2}"
+
+account_id=$(aws sts get-caller-identity --query "Account" --output text --profile $profile)
+
+echo "Logging in with docker"
+aws ecr get-login-password --region $region --profile $profile | docker login --username AWS --password-stdin --password-stdin ${account_id}.dkr.ecr.${region}.amazonaws.com
+echo "Logging in with helm"
+aws ecr get-login-password --region $region --profile $profile | helm registry login --username AWS --password-stdin ${account_id}.dkr.ecr.${region}.amazonaws.com
