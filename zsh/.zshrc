@@ -54,10 +54,14 @@ compinit
 zinit cdreplay -q # execute compdefs provided by rest of plugins
 # zi cdlist # look at gathered compdefs
 
-# Source lib/*.zsh files
-for config_file ($DOTFILES/zsh/lib/*.zsh); do
-  source $config_file
-done
+function zsh_load_config() {
+  # Source lib/*.zsh files
+  for config_file ($DOTFILES/zsh/lib/*.zsh); do
+    source $config_file
+  done
+}
+
+zsh_load_config
 
 export HISTORY_IGNORE="(access_token|accesstoken|AKIA|api_key|apikey|authonly|authorization|aws_access_key_id|aws_secret_access_key|bearer|client-secret|client_secret|current_key|eyjrijoi|gh_token|github_token|hooks.slack.com|id-token|id_token|kubectl --token=|kubectl config set-credentials|pagerduty_|password|private_key|private_key_id|read|refresh-token|refresh_token|refreshtoken|token|x-api-key|x-auth-key)"
 
