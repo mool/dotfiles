@@ -6,7 +6,7 @@ background-opacity = 0.93
 background-blur-radius = 20
 
 cursor-style = block
-macos-option-as-alt = true
+macos-option-as-alt = left
 macos-titlebar-style = hidden
 window-padding-balance = true
 window-padding-x = 5
