@@ -1,0 +1,101 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan",
+  "permission": {
+    "*": "allow",
+    "bash": {
+      "*": "allow",
+
+      "rm *": "ask",
+      "rmdir *": "ask",
+      "unlink *": "ask",
+
+      "mv *": "ask",
+      "rename *": "ask",
+
+      "dd *": "ask",
+      "shred *": "ask",
+      "truncate *": "ask",
+
+      "kubectl delete *": "ask",
+      "kubectl patch *": "ask",
+      "kubectl apply *": "ask",
+      "kubectl edit *": "ask",
+      "kubectl replace *": "ask",
+      "kubectl drain *": "ask",
+      "kubectl cordon *": "ask",
+      "kubectl scale *": "ask",
+
+      "aws * delete*": "ask",
+      "aws * terminate*": "ask",
+      "aws * remove*": "ask",
+      "aws * destroy*": "ask",
+      "aws s3 rm *": "ask",
+      "aws s3 rb *": "ask",
+      "aws ec2 terminate-instances *": "ask",
+      "aws rds delete-* *": "ask",
+      "aws lambda delete-* *": "ask",
+      "aws cloudformation delete-* *": "ask",
+
+      "docker rm *": "ask",
+      "docker rmi *": "ask",
+      "docker kill *": "ask",
+      "docker stop *": "ask",
+      "docker system prune *": "ask",
+      "docker volume rm *": "ask",
+      "docker network rm *": "ask",
+      "docker container rm *": "ask",
+      "docker image rm *": "ask",
+
+      "gcloud * delete *": "ask",
+      "gcloud * remove *": "ask",
+      "gcloud compute instances delete *": "ask",
+      "gcloud container clusters delete *": "ask",
+
+      "az * delete *": "ask",
+      "az * remove *": "ask",
+      "az vm delete *": "ask",
+      "az group delete *": "ask",
+
+      "terraform destroy *": "ask",
+      "terraform apply *": "ask",
+      "terraform taint *": "ask",
+
+      "git push --force *": "ask",
+      "git push -f *": "ask",
+      "git reset --hard *": "ask",
+      "git clean -fd *": "ask",
+      "git clean -fdx *": "ask",
+      "git branch -D *": "ask",
+      "git rebase * --force*": "ask",
+
+      "npm unpublish *": "ask",
+      "yarn unpublish *": "ask",
+      "pnpm unpublish *": "ask",
+
+      "systemctl stop *": "ask",
+      "systemctl disable *": "ask",
+      "systemctl kill *": "ask",
+      "service * stop": "ask",
+
+      "sudo rm *": "ask",
+      "sudo rmdir *": "ask",
+      "sudo kill *": "ask",
+      "sudo systemctl stop *": "ask",
+      "sudo systemctl disable *": "ask",
+      "sudo shutdown *": "ask",
+      "sudo reboot *": "ask",
+
+      "kill *": "ask",
+      "killall *": "ask",
+      "pkill *": "ask",
+
+      "curl -X DELETE *": "ask",
+      "curl --request DELETE *": "ask",
+      "wget * --method=DELETE *": "ask",
+      "http DELETE *": "ask",
+      "httpie DELETE *": "ask"
+    },
+    "external_directory": "ask"
+  }
+}
