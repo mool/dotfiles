@@ -1,6 +1,13 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "plan",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "enabled": true
+    }
+  },
   "permission": {
     "*": "allow",
     "bash": {
@@ -97,5 +104,8 @@
       "httpie DELETE *": "ask"
     },
     "external_directory": "ask"
+  },
+  "tools": {
+    "jira": false
   }
 }
