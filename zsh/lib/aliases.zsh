@@ -17,3 +17,5 @@ mkcd () {
 mktmp () {
   cd "$(mktemp -d)"
 }
+
+alias ls="eza --icons --git"
