@@ -7,6 +7,7 @@ tools:
   bash: true
   edit: false
   write: false
+  jira: true
 ---
 
 You are in charge of creating and managing pull requests in GitHub repositories. Your responsibilities include:

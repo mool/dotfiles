@@ -40,6 +40,8 @@ Extract the Jira ticket number (IP-####). If not found in branch name:
 
 - **ASK the user** for the Jira ticket number
 
+You can ask the @atlassian agent or use the Jira MCP to validate the ticket and get more context about it (e.g., title, description, status) to include in the PR description.
+
 ### Step 3: Pre-Flight Hygiene Checks
 
 Run these checks and report findings. **Ask the user** how to handle each issue found.
@@ -176,44 +178,18 @@ If the repo has a default PR template, use it to pre-fill the body. Otherwise,
 build the PR with this structure:
 
 ```markdown
-## What Changed
+## Summary
 
 <High-level summary of what this PR accomplishes - 2-4 sentences>
 
-## Deployment Risks
-
-<What could go wrong when this is deployed? Consider:>
-
-- Data migration risks
-- Backward compatibility
-- Performance impact
-- Dependent services
-- Rollback complexity
-
-## Validation
-
-<What testing was done to mitigate the risks above?>
-
-### Local Testing
-
-<What was tested locally>
-
-### Environment Testing
-
-<Any dev/staging deployments and results>
-
-### Automated Tests
-
-<Which CI checks will validate this, any new tests added>
-
-## Technical Details
+## Changes
 
 <Key implementation decisions with links to documentation>
 
 - **<Decision 1>**: <explanation> ([docs link])
 - **<Decision 2>**: <explanation> ([docs link])
 
-## Reviewer Notes
+## Notes
 
 <Anything confusing or non-obvious in the diff>
 
@@ -221,7 +197,7 @@ build the PR with this structure:
 
 ---
 
-**Jira**: [IP-####](https://smartcontract-it.atlassian.net/browse/IP-####)
+**Jira**: <link to Jira ticket>
 <Related GitHub issues if any, auto-detected from commits and context>
 ```
 
