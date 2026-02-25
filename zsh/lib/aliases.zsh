@@ -19,3 +19,4 @@ mktmp () {
 }
 
 alias ls="eza --icons --git"
+alias lla="ll -a"
