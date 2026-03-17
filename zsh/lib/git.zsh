@@ -1,3 +1,5 @@
+export GPG_TTY=$(tty)
+
 function gpc() {
   git pull && git cleanup
 }

@@ -1,7 +1,7 @@
 [user]
   name = Pablo Gutiérrez del Castillo
   email = pablogutierrezdelc@gmail.com
-  signingkey = 9C781E902ACBCB30E87D0379CD82D3B7C810023F
+	signingkey = E52E574BA2A4EAD6
 
 [core]
   excludesfile = /Users/mool/.gitignore_global
@@ -63,7 +63,7 @@
   defaultBranch = master
 
 [commit]
-  gpgsign = true
+	gpgsign = true
 [diff]
 	algorithm = histogram
 	colorMoved = plain
@@ -73,3 +73,5 @@
 	autoStash = true
 [pull]
 	rebase = true
+[tag]
+	gpgSign = true
