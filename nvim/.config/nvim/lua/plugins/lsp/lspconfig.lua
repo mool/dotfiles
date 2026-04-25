@@ -6,9 +6,6 @@ return {
 		{ "antosha417/nvim-lsp-file-operations", config = true },
 	},
 	config = function()
-		-- import lspconfig plugin
-		local lspconfig = require("lspconfig")
-
 		-- import cmp-nvim-lsp plugin
 		local cmp_nvim_lsp = require("cmp_nvim_lsp")
 
@@ -47,10 +44,10 @@ return {
 			keymap.set("n", "<leader>d", vim.diagnostic.open_float, opts) -- show diagnostics for line
 
 			opts.desc = "Go to previous diagnostic"
-			keymap.set("n", "[d", vim.diagnostic.get_prev, opts) -- jump to previous diagnostic in buffer
+			keymap.set("n", "[d", vim.diagnostic.goto_prev, opts) -- jump to previous diagnostic in buffer
 
 			opts.desc = "Go to next diagnostic"
-			keymap.set("n", "]d", vim.diagnostic.get_next, opts) -- jump to next diagnostic in buffer
+			keymap.set("n", "]d", vim.diagnostic.goto_next, opts) -- jump to next diagnostic in buffer
 
 			opts.desc = "Show documentation for what is under cursor"
 			keymap.set("n", "K", vim.lsp.buf.hover, opts) -- show documentation for what is under cursor
@@ -70,73 +67,6 @@ return {
 			vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = "" })
 		end
 
-		-- configure bashls server
-		lspconfig["bashls"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
-		-- configure docker_compose_language_service server
-		lspconfig["docker_compose_language_service"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
-		-- configure golangci_lint_ls server
-		lspconfig["golangci_lint_ls"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
-		-- configure gopls server
-		lspconfig["gopls"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
-		-- configure lua server (with special settings)
-		lspconfig["lua_ls"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-			settings = { -- custom settings for lua
-				Lua = {
-					-- make the language server recognize "vim" global
-					diagnostics = {
-						globals = { "vim" },
-					},
-					workspace = {
-						-- make language server aware of runtime files
-						library = {
-							[vim.fn.expand("$VIMRUNTIME/lua")] = true,
-							[vim.fn.stdpath("config") .. "/lua"] = true,
-						},
-					},
-				},
-			},
-		})
-
-		-- configure marksman server
-		lspconfig["marksman"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
-		-- configure pylsp server
-		lspconfig["pylsp"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
-		lspconfig["terraformls"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
-		lspconfig["tflint"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-		})
-
 		local yamlls_cfg = {
 			completion = true,
 			format = { enable = true },
@@ -148,23 +78,54 @@ return {
 			},
 		}
 
-		-- configure yamlls server
-		lspconfig["yamlls"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-			settings = { yaml = yamlls_cfg },
-		})
-
-		lspconfig["helm_ls"].setup({
-			capabilities = capabilities,
-			on_attach = on_attach,
-			settings = {
-				["helm-ls"] = {
-					yamlls = {
-						config = yamlls_cfg,
+		local servers = {
+			bashls = {},
+			biome = {},
+			docker_compose_language_service = {},
+			golangci_lint_ls = {},
+			gopls = {},
+			lua_ls = {
+				settings = {
+					Lua = {
+						diagnostics = {
+							globals = { "vim" },
+						},
+						workspace = {
+							library = {
+								[vim.fn.expand("$VIMRUNTIME/lua")] = true,
+								[vim.fn.stdpath("config") .. "/lua"] = true,
+							},
+						},
 					},
 				},
 			},
-		})
+			marksman = {},
+			pylsp = {},
+			terraformls = {},
+			tflint = {},
+			yamlls = {
+				settings = { yaml = yamlls_cfg },
+			},
+			helm_ls = {
+				settings = {
+					["helm-ls"] = {
+						yamlls = {
+							config = yamlls_cfg,
+						},
+					},
+				},
+			},
+		}
+
+		for server, server_opts in pairs(servers) do
+			vim.lsp.config(
+				server,
+				vim.tbl_deep_extend("force", {
+					capabilities = capabilities,
+					on_attach = on_attach,
+				}, server_opts)
+			)
+			vim.lsp.enable(server)
+		end
 	end,
 }
