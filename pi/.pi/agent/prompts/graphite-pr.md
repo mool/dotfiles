@@ -3,7 +3,9 @@ description: Create and submit a PR with Graphite after context gathering, hygie
 argument-hint: "[extra instructions]"
 ---
 
-Use the `graphite` skill and the Graphite CLI to create and submit a PR for the current repository.
+Use the `graphite` skill and the Graphite CLI to create and submit a new PR for the current repository.
+
+Primary goal: create a new PR, or create a new stacked PR on top of the current PR. Do not update, amend, rename, edit, force-push, or otherwise modify an existing/current PR.
 
 Extra instructions from the user: $@
 
@@ -62,6 +64,7 @@ Important behavior requirements:
 
 - Be concise, but do not skip the hygiene report.
 - Ask before taking irreversible or user-visible actions.
+- Never update the current/existing PR. This prompt is for new PRs and new stacked PRs only.
 - Never modify repository files as part of this prompt. If checks fail, report the failure and ask whether to proceed with the PR as-is; do not attempt a fix.
 - If the change set should obviously be split into multiple atomic PRs, say so before proceeding and propose the split.
 - Do not invent testing results. Report only what you verified or what the user states.
