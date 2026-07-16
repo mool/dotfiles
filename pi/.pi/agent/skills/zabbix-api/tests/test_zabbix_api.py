@@ -84,6 +84,18 @@ class ConfigurationTests(unittest.TestCase):
                 False, {"ZABBIX_API_URL": "https://[invalid/api_jsonrpc.php"}
             )
 
+    def test_config_rejects_nonnumeric_url_port(self):
+        zabbix_api = load_module()
+        with self.assertRaisesRegex(zabbix_api.SkillError, "ZABBIX_API_URL"):
+            zabbix_api.load_config(
+                False,
+                {
+                    "ZABBIX_API_URL": (
+                        "http://127.0.0.1:not-a-port/api_jsonrpc.php"
+                    )
+                },
+            )
+
     def test_authenticated_config_requires_token_without_exposing_it(self):
         zabbix_api = load_module()
         with self.assertRaisesRegex(zabbix_api.SkillError, "ZABBIX_API_TOKEN"):

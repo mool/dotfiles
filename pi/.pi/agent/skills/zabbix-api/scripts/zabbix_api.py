@@ -36,6 +36,13 @@ def load_config(require_token: bool, env: Mapping[str, str]) -> ApiConfig:
         raise SkillError("ZABBIX_API_URL must be a full http or https URL")
     if parsed_url.username is not None or parsed_url.password is not None:
         raise SkillError("ZABBIX_API_URL must not contain credentials")
+    try:
+        hostname = parsed_url.hostname
+        parsed_url.port
+    except ValueError:
+        raise SkillError("ZABBIX_API_URL must be a valid URL") from None
+    if hostname is None:
+        raise SkillError("ZABBIX_API_URL must be a valid URL")
 
     token = env.get("ZABBIX_API_TOKEN", "").strip() or None
     if require_token and token is None:
