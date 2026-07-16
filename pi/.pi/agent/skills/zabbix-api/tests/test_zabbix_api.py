@@ -1073,6 +1073,40 @@ class CompatibilityWarningOrderingTests(unittest.TestCase):
             )
         self.assert_warning_precedes_operation_error(result)
 
+    def test_newer_version_warning_redacts_configured_token_before_failed_read(self):
+        sentinel = "SENSITIVE-ZABBIX-TOKEN"
+
+        def responder(payload):
+            if payload["method"] == "apiinfo.version":
+                return rpc_result(payload, f"6.0.0.{sentinel}")
+            return 200, {
+                "jsonrpc": "2.0",
+                "error": {"code": -32602, "message": "operation failed"},
+                "id": payload["id"],
+            }
+
+        with fake_zabbix(responder) as (server, url):
+            result = run_cli(
+                "hosts",
+                "get",
+                env={
+                    **os.environ,
+                    "ZABBIX_API_URL": url,
+                    "ZABBIX_API_TOKEN": sentinel,
+                },
+            )
+
+        self.assertEqual(
+            [request["method"] for request in server.requests],
+            ["apiinfo.version", "host.get"],
+        )
+        self.assertEqual(server.requests[1]["auth"], sentinel)
+        self.assert_warning_precedes_operation_error(result)
+        self.assertIn("Zabbix 6.0.0.[REDACTED]", result.stderr)
+        self.assertIn("compatibility is not verified", result.stderr)
+        self.assertNotIn(sentinel, result.stdout)
+        self.assertNotIn(sentinel, result.stderr)
+
     def test_newer_version_warning_precedes_failed_authenticated_apply(self):
         params = {"host": "edge-1", "groups": [{"groupid": "2"}]}
         digest = load_module().mutation_digest("host.create", params)

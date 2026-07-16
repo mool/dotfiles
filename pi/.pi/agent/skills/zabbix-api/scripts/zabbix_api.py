@@ -294,9 +294,13 @@ def _print_json(value: object, token: str | None) -> None:
     print(output)
 
 
-def _print_warning(warning: str | None) -> None:
+def _print_warning(warning: str | None, token: str | None) -> None:
     if warning is not None:
-        print(f"warning: {warning}", file=sys.stderr, flush=True)
+        print(
+            f"warning: {_redact_token(warning, token)}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def current_problem_params(extra: Mapping[str, object]) -> dict[str, object]:
@@ -464,7 +468,7 @@ def main(
             client = ZabbixClient(config)
             version = client.version()
             warning = check_supported_version(version)
-            _print_warning(warning)
+            _print_warning(warning, config.token)
             result = client.call(method, params, authenticated=True)
             _print_json(result, config.token)
             return 0
@@ -484,20 +488,20 @@ def main(
                 params = historical_problem_params(args.since, args.until, extra)
             version = client.version()
             warning = check_supported_version(version)
-            _print_warning(warning)
+            _print_warning(warning, config.token)
             result = client.call(method, params, authenticated=True)
         else:
             extra = load_json_params(args.params_file, False, sys.stdin)
             version = client.version()
             warning = check_supported_version(version)
-            _print_warning(warning)
+            _print_warning(warning, config.token)
             result = client.call(
                 "host.get", host_query_params(extra), authenticated=True
             )
 
         if args.command == "version":
             warning = check_supported_version(result)
-            _print_warning(warning)
+            _print_warning(warning, config.token)
         _print_json(result, config.token)
         return 0
     except SkillError as error:
