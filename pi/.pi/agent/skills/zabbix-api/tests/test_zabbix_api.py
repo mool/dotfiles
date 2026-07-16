@@ -76,6 +76,37 @@ def run_cli(*args, env, input_text=None):
     )
 
 
+class ArgumentParsingSecrecyTests(unittest.TestCase):
+    sentinel = "SENSITIVE-ARGPARSE-TOKEN-7f4d"
+
+    def assert_sanitized_parse_error(self, result):
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn(self.sentinel, result.stdout)
+        self.assertNotIn(self.sentinel, result.stderr)
+        self.assertIn("error:", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertLessEqual(len(result.stderr.splitlines()), 4)
+
+    def test_invalid_subcommand_does_not_echo_configured_token(self):
+        result = run_cli(
+            "hosts",
+            self.sentinel,
+            env={**os.environ, "ZABBIX_API_TOKEN": self.sentinel},
+        )
+
+        self.assert_sanitized_parse_error(result)
+
+    def test_unrecognized_extra_argument_does_not_echo_configured_token(self):
+        result = run_cli(
+            "version",
+            self.sentinel,
+            env={**os.environ, "ZABBIX_API_TOKEN": self.sentinel},
+        )
+
+        self.assert_sanitized_parse_error(result)
+
+
 class ParameterInputTests(unittest.TestCase):
     def test_loads_json_object_from_file(self):
         module = load_module()

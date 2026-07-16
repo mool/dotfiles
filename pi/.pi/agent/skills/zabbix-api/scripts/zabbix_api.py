@@ -22,6 +22,26 @@ class SkillError(Exception):
     """A user-actionable Zabbix API failure."""
 
 
+class RedactingArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args, token: str | None = None, **kwargs):
+        self.token = token
+        super().__init__(*args, **kwargs)
+
+    def add_subparsers(self, **kwargs):
+        kwargs.setdefault(
+            "parser_class",
+            lambda **parser_kwargs: RedactingArgumentParser(
+                token=self.token, **parser_kwargs
+            ),
+        )
+        return super().add_subparsers(**kwargs)
+
+    def _print_message(self, message, file=None):
+        if message and self.token:
+            message = message.replace(self.token, "[REDACTED]")
+        super()._print_message(message, file)
+
+
 @dataclass(frozen=True)
 class ApiConfig:
     url: str
@@ -378,7 +398,9 @@ def main(
     argv: Sequence[str] | None = None,
     env: Mapping[str, str] | None = None,
 ) -> int:
-    parser = argparse.ArgumentParser()
+    environment = os.environ if env is None else env
+    token = environment.get("ZABBIX_API_TOKEN", "").strip()
+    parser = RedactingArgumentParser(token=token)
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("version")
 
@@ -406,7 +428,6 @@ def main(
         mutation_parser.add_argument("--confirm-digest")
 
     args = parser.parse_args(argv)
-    environment = os.environ if env is None else env
 
     try:
         if args.command == "hosts" and args.hosts_command in {"create", "update"}:
