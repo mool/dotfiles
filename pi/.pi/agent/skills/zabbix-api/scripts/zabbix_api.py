@@ -8,7 +8,8 @@ import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from datetime import datetime, timezone
+from typing import Mapping, Sequence, TextIO
 from urllib.parse import urlsplit
 
 
@@ -61,6 +62,29 @@ def build_ssl_context(config: ApiConfig) -> ssl.SSLContext | None:
     if urlsplit(config.url).scheme == "https":
         return ssl.create_default_context(cafile=config.ca_file)
     return None
+
+
+def load_json_params(
+    path: str | None, use_stdin: bool, stdin: TextIO
+) -> dict[str, object]:
+    if path is not None and use_stdin:
+        raise SkillError("use only one parameter input source")
+    if path is None and not use_stdin:
+        return {}
+
+    source = path if path is not None else "standard input"
+    try:
+        if path is not None:
+            with open(path, encoding="utf-8") as params_file:
+                params = json.load(params_file)
+        else:
+            params = json.load(stdin)
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        raise SkillError(f"could not load JSON parameters from {source}") from None
+
+    if not isinstance(params, dict):
+        raise SkillError(f"JSON parameters from {source} must be an object")
+    return params
 
 
 class ZabbixClient:
@@ -128,6 +152,83 @@ class ZabbixClient:
         return self.call("apiinfo.version", {}, authenticated=False)
 
 
+def current_problem_params(extra: Mapping[str, object]) -> dict[str, object]:
+    params: dict[str, object] = {
+        "output": "extend",
+        "recent": False,
+        "sortfield": ["eventid"],
+        "sortorder": "DESC",
+        "selectAcknowledges": "extend",
+        "selectTags": "extend",
+        "selectSuppressionData": "extend",
+    }
+    params.update(extra)
+    params["recent"] = False
+    return params
+
+
+def parse_timestamp(value: str) -> datetime:
+    iso_value = f"{value[:-1]}+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(iso_value)
+    except ValueError:
+        raise SkillError("timestamp must be valid ISO-8601") from None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise SkillError("timestamp must include a timezone")
+    return parsed.astimezone(timezone.utc)
+
+
+def historical_problem_params(
+    since: str,
+    until: str | None,
+    extra: Mapping[str, object],
+    now: datetime | None = None,
+) -> dict[str, object]:
+    since_time = parse_timestamp(since)
+    if until is not None:
+        until_time = parse_timestamp(until)
+    else:
+        until_time = now if now is not None else datetime.now(timezone.utc)
+        if until_time.tzinfo is None or until_time.utcoffset() is None:
+            raise SkillError("current time must include a timezone")
+        until_time = until_time.astimezone(timezone.utc)
+    if since_time >= until_time:
+        raise SkillError("--since must be before --until")
+
+    params: dict[str, object] = {
+        "sortfield": ["clock", "eventid"],
+        "sortorder": "DESC",
+    }
+    params.update(extra)
+    params.update(
+        {
+            "source": 0,
+            "object": 0,
+            "value": 1,
+            "time_from": int(since_time.timestamp()),
+            "time_till": int(until_time.timestamp()),
+        }
+    )
+    return params
+
+
+def host_query_params(extra: Mapping[str, object]) -> dict[str, object]:
+    params: dict[str, object] = {
+        "output": ["hostid", "host", "name", "status"],
+        "selectInterfaces": [
+            "interfaceid",
+            "type",
+            "main",
+            "useip",
+            "ip",
+            "dns",
+            "port",
+        ],
+    }
+    params.update(extra)
+    return params
+
+
 def check_supported_version(version: str) -> str | None:
     components = version.split(".") if isinstance(version, str) else []
     if len(components) < 3 or not all(
@@ -153,16 +254,56 @@ def main(
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("version")
+
+    problems_parser = subparsers.add_parser("problems")
+    problems_subparsers = problems_parser.add_subparsers(
+        dest="problems_command", required=True
+    )
+    current_parser = problems_subparsers.add_parser("current")
+    current_parser.add_argument("--params-file")
+    history_parser = problems_subparsers.add_parser("history")
+    history_parser.add_argument("--since", required=True)
+    history_parser.add_argument("--until")
+    history_parser.add_argument("--params-file")
+
+    hosts_parser = subparsers.add_parser("hosts")
+    hosts_subparsers = hosts_parser.add_subparsers(dest="hosts_command", required=True)
+    hosts_get_parser = hosts_subparsers.add_parser("get")
+    hosts_get_parser.add_argument("--params-file")
+
     args = parser.parse_args(argv)
 
     try:
-        config = load_config(require_token=False, env=os.environ if env is None else env)
+        environment = os.environ if env is None else env
+        require_token = args.command != "version"
+        config = load_config(require_token=require_token, env=environment)
+        client = ZabbixClient(config)
         if args.command == "version":
-            result = ZabbixClient(config).version()
+            result = client.version()
+        elif args.command == "problems":
+            extra = load_json_params(args.params_file, False, sys.stdin)
+            if args.problems_command == "current":
+                method = "problem.get"
+                params = current_problem_params(extra)
+            else:
+                method = "event.get"
+                params = historical_problem_params(args.since, args.until, extra)
+            version = client.version()
+            warning = check_supported_version(version)
+            result = client.call(method, params, authenticated=True)
+        else:
+            extra = load_json_params(args.params_file, False, sys.stdin)
+            version = client.version()
+            warning = check_supported_version(version)
+            result = client.call(
+                "host.get", host_query_params(extra), authenticated=True
+            )
+
+        if args.command == "version":
             warning = check_supported_version(result)
-            print(json.dumps(result, indent=2))
-            if warning is not None:
-                print(f"warning: {warning}", file=sys.stderr)
+        print(json.dumps(result, indent=2))
+        if warning is not None:
+            print(f"warning: {warning}", file=sys.stderr)
         return 0
     except SkillError as error:
         print(f"error: {error}", file=sys.stderr)

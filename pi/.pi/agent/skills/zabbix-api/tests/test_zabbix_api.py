@@ -1,5 +1,6 @@
 import contextlib
 import importlib.util
+import io
 import json
 import os
 import ssl
@@ -8,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
@@ -68,6 +70,231 @@ def run_cli(*args, env):
         capture_output=True,
         check=False,
     )
+
+
+class ParameterInputTests(unittest.TestCase):
+    def test_loads_json_object_from_file(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "params.json"
+            path.write_text('{"hostids": ["10105"]}', encoding="utf-8")
+            params = module.load_json_params(str(path), False, None)
+        self.assertEqual(params, {"hostids": ["10105"]})
+
+    def test_rejects_malformed_json_without_echoing_contents(self):
+        module = load_module()
+        secret_contents = '{"sentinel-secret": invalid}'
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "params.json"
+            path.write_text(secret_contents, encoding="utf-8")
+            with self.assertRaisesRegex(module.SkillError, str(path)) as raised:
+                module.load_json_params(str(path), False, None)
+        self.assertNotIn(secret_contents, str(raised.exception))
+
+    def test_rejects_non_object_query_value_and_names_stdin(self):
+        module = load_module()
+        with self.assertRaisesRegex(module.SkillError, "standard input"):
+            module.load_json_params(None, True, io.StringIO('["not-an-object"]'))
+
+    def test_rejects_file_and_stdin_together(self):
+        module = load_module()
+        with self.assertRaisesRegex(module.SkillError, "only one"):
+            module.load_json_params("params.json", True, io.StringIO("{}"))
+
+
+class CurrentProblemTests(unittest.TestCase):
+    def test_current_problems_probe_version_and_force_active_query(self):
+        def responder(payload):
+            if payload["method"] == "apiinfo.version":
+                return rpc_result(payload, "5.4.12")
+            return rpc_result(payload, [{"eventid": "42"}])
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "params.json"
+            path.write_text(
+                '{"hostids": ["10105"], "recent": true}', encoding="utf-8"
+            )
+            with fake_zabbix(responder) as (server, url):
+                result = run_cli(
+                    "problems",
+                    "current",
+                    "--params-file",
+                    str(path),
+                    env={
+                        **os.environ,
+                        "ZABBIX_API_URL": url,
+                        "ZABBIX_API_TOKEN": "secret-token",
+                    },
+                )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [{"eventid": "42"}])
+        self.assertEqual(
+            [request["method"] for request in server.requests],
+            ["apiinfo.version", "problem.get"],
+        )
+        self.assertNotIn("auth", server.requests[0])
+        operation = server.requests[1]
+        self.assertEqual(operation["auth"], "secret-token")
+        self.assertEqual(operation["params"]["output"], "extend")
+        self.assertFalse(operation["params"]["recent"])
+        self.assertEqual(operation["params"]["sortfield"], ["eventid"])
+        self.assertEqual(operation["params"]["sortorder"], "DESC")
+        self.assertEqual(operation["params"]["selectAcknowledges"], "extend")
+        self.assertEqual(operation["params"]["selectTags"], "extend")
+        self.assertEqual(operation["params"]["selectSuppressionData"], "extend")
+        self.assertEqual(operation["params"]["hostids"], ["10105"])
+
+
+class HistoricalProblemTests(unittest.TestCase):
+    def test_history_uses_bounded_problem_events(self):
+        module = load_module()
+        params = module.historical_problem_params(
+            "2026-01-01T00:00:00Z",
+            "2026-01-31T23:59:59Z",
+            {"hostids": ["10105"], "source": 3, "time_from": 1},
+        )
+        self.assertEqual(params["source"], 0)
+        self.assertEqual(params["object"], 0)
+        self.assertEqual(params["value"], 1)
+        self.assertEqual(params["time_from"], 1767225600)
+        self.assertEqual(params["time_till"], 1769903999)
+        self.assertEqual(params["hostids"], ["10105"])
+        self.assertEqual(params["sortfield"], ["clock", "eventid"])
+        self.assertEqual(params["sortorder"], "DESC")
+
+    def test_parse_timestamp_rejects_naive_value(self):
+        module = load_module()
+        with self.assertRaisesRegex(module.SkillError, "timezone"):
+            module.parse_timestamp("2026-01-01T00:00:00")
+
+    def test_parse_timestamp_normalizes_explicit_offset_to_utc(self):
+        module = load_module()
+        self.assertEqual(
+            module.parse_timestamp("2026-01-01T02:00:00+02:00"),
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+    def test_history_rejects_since_at_or_after_until(self):
+        module = load_module()
+        with self.assertRaisesRegex(module.SkillError, "before"):
+            module.historical_problem_params(
+                "2026-02-01T00:00:00Z", "2026-02-01T00:00:00Z", {}
+            )
+
+    def test_history_defaults_until_to_injected_aware_now(self):
+        module = load_module()
+        params = module.historical_problem_params(
+            "2026-01-01T00:00:00Z",
+            None,
+            {},
+            now=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(params["time_till"], 1769904000)
+
+    def test_history_cli_probes_version_before_event_query(self):
+        def responder(payload):
+            if payload["method"] == "apiinfo.version":
+                return rpc_result(payload, "5.4.12")
+            return rpc_result(payload, [{"eventid": "41"}])
+
+        with fake_zabbix(responder) as (server, url):
+            result = run_cli(
+                "problems",
+                "history",
+                "--since",
+                "2026-01-01T00:00:00Z",
+                "--until",
+                "2026-01-31T23:59:59Z",
+                env={
+                    **os.environ,
+                    "ZABBIX_API_URL": url,
+                    "ZABBIX_API_TOKEN": "secret-token",
+                },
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [{"eventid": "41"}])
+        self.assertEqual(
+            [request["method"] for request in server.requests],
+            ["apiinfo.version", "event.get"],
+        )
+        self.assertNotIn("auth", server.requests[0])
+        self.assertEqual(server.requests[1]["auth"], "secret-token")
+
+
+class HostQueryTests(unittest.TestCase):
+    @staticmethod
+    def responder(payload):
+        if payload["method"] == "apiinfo.version":
+            return rpc_result(payload, "5.4.12")
+        return rpc_result(payload, [{"hostid": "10105"}])
+
+    def test_hosts_get_probes_version_and_uses_conservative_defaults(self):
+        with fake_zabbix(self.responder) as (server, url):
+            result = run_cli(
+                "hosts",
+                "get",
+                env={
+                    **os.environ,
+                    "ZABBIX_API_URL": url,
+                    "ZABBIX_API_TOKEN": "secret-token",
+                },
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [{"hostid": "10105"}])
+        self.assertEqual(
+            [request["method"] for request in server.requests],
+            ["apiinfo.version", "host.get"],
+        )
+        self.assertNotIn("auth", server.requests[0])
+        self.assertEqual(server.requests[1]["auth"], "secret-token")
+        self.assertEqual(
+            server.requests[1]["params"],
+            {
+                "output": ["hostid", "host", "name", "status"],
+                "selectInterfaces": [
+                    "interfaceid",
+                    "type",
+                    "main",
+                    "useip",
+                    "ip",
+                    "dns",
+                    "port",
+                ],
+            },
+        )
+
+    def test_hosts_get_extra_params_override_defaults(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "params.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "filter": {"host": ["edge-1"]},
+                        "output": ["hostid", "name"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with fake_zabbix(self.responder) as (server, url):
+                result = run_cli(
+                    "hosts",
+                    "get",
+                    "--params-file",
+                    str(path),
+                    env={
+                        **os.environ,
+                        "ZABBIX_API_URL": url,
+                        "ZABBIX_API_TOKEN": "secret-token",
+                    },
+                )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        params = server.requests[1]["params"]
+        self.assertEqual(params["filter"], {"host": ["edge-1"]})
+        self.assertEqual(params["output"], ["hostid", "name"])
 
 
 class ConfigurationTests(unittest.TestCase):
