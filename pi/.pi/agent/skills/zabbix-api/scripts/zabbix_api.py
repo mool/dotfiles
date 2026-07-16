@@ -70,7 +70,10 @@ def load_config(require_token: bool, env: Mapping[str, str]) -> ApiConfig:
 
 def build_ssl_context(config: ApiConfig) -> ssl.SSLContext | None:
     if urlsplit(config.url).scheme == "https":
-        return ssl.create_default_context(cafile=config.ca_file)
+        try:
+            return ssl.create_default_context(cafile=config.ca_file)
+        except ssl.SSLError:
+            raise SkillError("could not load certificates from ZABBIX_CA_FILE") from None
     return None
 
 
@@ -155,6 +158,8 @@ class ZabbixClient:
             raise SkillError(f"Zabbix API returned HTTP {error.code}") from None
         except (http.client.InvalidURL, ValueError, UnicodeError):
             raise SkillError("ZABBIX_API_URL could not be used for a request") from None
+        except http.client.HTTPException:
+            raise SkillError("Zabbix API response could not be read") from None
         except urllib.error.URLError as error:
             if isinstance(error.reason, TimeoutError):
                 raise SkillError("Zabbix API request timed out") from None
@@ -248,6 +253,8 @@ def _redact_token(value: object, token: str | None) -> object:
     if isinstance(value, list):
         return [_redact_token(item, token) for item in value]
     if isinstance(value, dict):
+        if any(isinstance(key, str) and token in key for key in value):
+            raise SkillError("output contains ZABBIX_API_TOKEN in an object key")
         return {
             _redact_token(key, token): _redact_token(item, token)
             for key, item in value.items()

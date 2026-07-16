@@ -32,11 +32,13 @@ class JsonRpcHandler(BaseHTTPRequestHandler):
         length = int(self.headers["Content-Length"])
         payload = json.loads(self.rfile.read(length))
         self.server.requests.append(payload)
-        status, response = self.server.responder(payload)
+        reply = self.server.responder(payload)
+        status, response = reply[:2]
         body = response if isinstance(response, bytes) else json.dumps(response).encode()
+        content_length = reply[2] if len(reply) == 3 else len(body)
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(content_length))
         self.end_headers()
         self.wfile.write(body)
 
@@ -704,6 +706,26 @@ class ConfigurationTests(unittest.TestCase):
                 )
         self.assertNotIn(unrelated_value, str(raised.exception))
 
+    def test_readable_invalid_ca_file_is_reported_without_traceback_or_secrets(self):
+        secret = "SENSITIVE-CA-PATH-AND-CONTENTS"
+        with tempfile.TemporaryDirectory() as directory:
+            ca_file = Path(directory) / f"{secret}.pem"
+            ca_file.write_text(secret, encoding="utf-8")
+            result = run_cli(
+                "version",
+                env={
+                    **os.environ,
+                    "ZABBIX_API_URL": "https://z.example/api_jsonrpc.php",
+                    "ZABBIX_CA_FILE": str(ca_file),
+                },
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("ZABBIX_CA_FILE", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertNotIn(secret, result.stderr)
+
     def test_config_preserves_readable_default_ca_file(self):
         ca_file = ssl.get_default_verify_paths().cafile
         if not ca_file or not Path(ca_file).is_file():
@@ -769,6 +791,20 @@ class TransportTests(unittest.TestCase):
             client = module.ZabbixClient(module.ApiConfig(url, None, None))
             with self.assertRaisesRegex(module.SkillError, "malformed JSON"):
                 client.call("host.get", {}, authenticated=False)
+
+    def test_truncated_response_is_reported_without_body_or_token(self):
+        token = "SENSITIVE-ZABBIX-TOKEN"
+        partial_body = f'{{"secret":"{token}"'.encode()
+        with fake_zabbix(
+            lambda payload: (200, partial_body, len(partial_body) + 100)
+        ) as (_server, url):
+            module = load_module()
+            client = module.ZabbixClient(module.ApiConfig(url, token, None))
+            with self.assertRaisesRegex(module.SkillError, "response") as raised:
+                client.call("host.get", {}, authenticated=True)
+
+        self.assertNotIn(token, str(raised.exception))
+        self.assertNotIn(partial_body.decode(), str(raised.exception))
 
     def test_json_rpc_error_does_not_expose_response_or_token(self):
         token = "secret-token"
@@ -866,6 +902,38 @@ class TransportTests(unittest.TestCase):
 
 
 class SuccessfulOutputSecrecyTests(unittest.TestCase):
+    def test_successful_result_rejects_token_in_object_key_without_exposure(self):
+        sentinel = "SENSITIVE-ZABBIX-TOKEN"
+        secret_key = f"private-{sentinel}"
+
+        def responder(payload):
+            if payload["method"] == "apiinfo.version":
+                return rpc_result(payload, "5.4.12")
+            return rpc_result(
+                payload,
+                {
+                    secret_key: "first",
+                    "private-[REDACTED]": "second",
+                },
+            )
+
+        with fake_zabbix(responder) as (_server, url):
+            result = run_cli(
+                "hosts",
+                "get",
+                env={
+                    **os.environ,
+                    "ZABBIX_API_URL": url,
+                    "ZABBIX_API_TOKEN": sentinel,
+                },
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("object key", result.stderr)
+        self.assertNotIn(sentinel, result.stderr)
+        self.assertNotIn(secret_key, result.stderr)
+
     def test_successful_result_recursively_redacts_configured_token_as_valid_json(self):
         sentinel = "SENSITIVE-ZABBIX-TOKEN"
 
