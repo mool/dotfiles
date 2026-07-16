@@ -13,3 +13,6 @@ vim/.vim/plugged
 
 # tmux
 tmux/.tmux/plugins
+
+# Git worktrees
+.worktrees/
