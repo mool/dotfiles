@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
 import ssl
@@ -64,9 +66,7 @@ def build_ssl_context(config: ApiConfig) -> ssl.SSLContext | None:
     return None
 
 
-def load_json_params(
-    path: str | None, use_stdin: bool, stdin: TextIO
-) -> dict[str, object]:
+def _load_json_input(path: str | None, use_stdin: bool, stdin: TextIO) -> object:
     if path is not None and use_stdin:
         raise SkillError("use only one parameter input source")
     if path is None and not use_stdin:
@@ -76,15 +76,26 @@ def load_json_params(
     try:
         if path is not None:
             with open(path, encoding="utf-8") as params_file:
-                params = json.load(params_file)
-        else:
-            params = json.load(stdin)
+                return json.load(params_file)
+        return json.load(stdin)
     except (OSError, UnicodeError, json.JSONDecodeError):
         raise SkillError(f"could not load JSON parameters from {source}") from None
 
+
+def load_json_params(
+    path: str | None, use_stdin: bool, stdin: TextIO
+) -> dict[str, object]:
+    params = _load_json_input(path, use_stdin, stdin)
     if not isinstance(params, dict):
+        source = path if path is not None else "standard input"
         raise SkillError(f"JSON parameters from {source} must be an object")
     return params
+
+
+def load_mutation_params(
+    path: str | None, use_stdin: bool, stdin: TextIO
+) -> dict[str, object] | list[dict[str, object]]:
+    return validate_mutation_params(_load_json_input(path, use_stdin, stdin))
 
 
 class ZabbixClient:
@@ -150,6 +161,42 @@ class ZabbixClient:
 
     def version(self) -> str:
         return self.call("apiinfo.version", {}, authenticated=False)
+
+
+def validate_mutation_params(
+    value: object,
+) -> dict[str, object] | list[dict[str, object]]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list) and value and all(
+        isinstance(item, dict) for item in value
+    ):
+        return value
+    raise SkillError("mutation parameters must be an object or nonempty list of objects")
+
+
+def canonical_mutation(method: str, params: object) -> bytes:
+    validated_params = validate_mutation_params(params)
+    return json.dumps(
+        {"method": method, "params": validated_params},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def mutation_digest(method: str, params: object) -> str:
+    return hashlib.sha256(canonical_mutation(method, params)).hexdigest()
+
+
+def mutation_preview(method: str, params: object) -> dict[str, object]:
+    validated_params = validate_mutation_params(params)
+    return {
+        "dry_run": True,
+        "method": method,
+        "params": validated_params,
+        "sha256": mutation_digest(method, validated_params),
+    }
 
 
 def current_problem_params(extra: Mapping[str, object]) -> dict[str, object]:
@@ -270,11 +317,53 @@ def main(
     hosts_subparsers = hosts_parser.add_subparsers(dest="hosts_command", required=True)
     hosts_get_parser = hosts_subparsers.add_parser("get")
     hosts_get_parser.add_argument("--params-file")
+    for mutation_command in ("create", "update"):
+        mutation_parser = hosts_subparsers.add_parser(mutation_command)
+        mutation_input = mutation_parser.add_mutually_exclusive_group(required=True)
+        mutation_input.add_argument("--params-file")
+        mutation_input.add_argument("--params-stdin", action="store_true")
+        mutation_parser.add_argument("--apply", action="store_true")
+        mutation_parser.add_argument("--confirm-digest")
 
     args = parser.parse_args(argv)
+    environment = os.environ if env is None else env
 
     try:
-        environment = os.environ if env is None else env
+        if args.command == "hosts" and args.hosts_command in {"create", "update"}:
+            method = {"create": "host.create", "update": "host.update"}[
+                args.hosts_command
+            ]
+            params = load_mutation_params(
+                args.params_file, args.params_stdin, sys.stdin
+            )
+            if args.confirm_digest is not None and not args.apply:
+                raise SkillError("--confirm-digest requires --apply")
+            if not args.apply:
+                print(json.dumps(mutation_preview(method, params), indent=2))
+                return 0
+            if args.confirm_digest is None:
+                raise SkillError("--apply requires --confirm-digest")
+            if len(args.confirm_digest) != 64 or any(
+                character not in "0123456789abcdef"
+                for character in args.confirm_digest
+            ):
+                raise SkillError(
+                    "--confirm-digest must be exactly 64 lowercase hexadecimal characters"
+                )
+            expected_digest = mutation_digest(method, params)
+            if not hmac.compare_digest(args.confirm_digest, expected_digest):
+                raise SkillError("--confirm-digest does not match this mutation")
+
+            config = load_config(require_token=True, env=environment)
+            client = ZabbixClient(config)
+            version = client.version()
+            warning = check_supported_version(version)
+            result = client.call(method, params, authenticated=True)
+            print(json.dumps(result, indent=2))
+            if warning is not None:
+                print(f"warning: {warning}", file=sys.stderr)
+            return 0
+
         require_token = args.command != "version"
         config = load_config(require_token=require_token, env=environment)
         client = ZabbixClient(config)
@@ -306,7 +395,11 @@ def main(
             print(f"warning: {warning}", file=sys.stderr)
         return 0
     except SkillError as error:
-        print(f"error: {error}", file=sys.stderr)
+        message = str(error)
+        token = environment.get("ZABBIX_API_TOKEN", "").strip()
+        if token:
+            message = message.replace(token, "[REDACTED]")
+        print(f"error: {message}", file=sys.stderr)
         return 1
 
 

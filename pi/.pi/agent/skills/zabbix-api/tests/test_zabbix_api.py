@@ -62,10 +62,11 @@ def rpc_result(payload, result):
     return 200, {"jsonrpc": "2.0", "result": result, "id": payload["id"]}
 
 
-def run_cli(*args, env):
+def run_cli(*args, env, input_text=None):
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         env=env,
+        input=input_text,
         text=True,
         capture_output=True,
         check=False,
@@ -100,6 +101,280 @@ class ParameterInputTests(unittest.TestCase):
         module = load_module()
         with self.assertRaisesRegex(module.SkillError, "only one"):
             module.load_json_params("params.json", True, io.StringIO("{}"))
+
+
+class MutationShapeDigestTests(unittest.TestCase):
+    def test_mutation_params_accept_object_or_nonempty_object_list(self):
+        module = load_module()
+        params = {"host": "edge-1"}
+        batch_params = [{"host": "edge-1"}, {"host": "edge-2"}]
+        self.assertIs(module.validate_mutation_params(params), params)
+        self.assertIs(module.validate_mutation_params(batch_params), batch_params)
+
+    def test_mutation_params_reject_invalid_shapes(self):
+        module = load_module()
+        for params in ([], "edge-1", [{"host": "edge-1"}, "edge-2"]):
+            with self.subTest(params=params):
+                with self.assertRaises(module.SkillError):
+                    module.validate_mutation_params(params)
+
+    def test_mutation_digest_is_stable_and_covers_method_and_params(self):
+        module = load_module()
+        params = {"groups": [{"groupid": "2"}], "host": "edge-1"}
+        self.assertEqual(
+            module.canonical_mutation("host.create", params),
+            b'{"method":"host.create","params":{"groups":[{"groupid":"2"}],"host":"edge-1"}}',
+        )
+        self.assertEqual(
+            module.mutation_digest("host.create", params),
+            "79a1738c95fcc3be720fabc75b5bb0bf275250b6ccbef2a99b4e0bfd953487ec",
+        )
+
+
+class MutationDryRunTests(unittest.TestCase):
+    def test_host_create_file_previews_without_live_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "payload.json"
+            path.write_text(
+                '{"groups": [{"groupid": "2"}], "host": "edge-1"}',
+                encoding="utf-8",
+            )
+            result = run_cli(
+                "hosts", "create", "--params-file", str(path), env={}
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "dry_run": True,
+                "method": "host.create",
+                "params": {
+                    "groups": [{"groupid": "2"}],
+                    "host": "edge-1",
+                },
+                "sha256": (
+                    "79a1738c95fcc3be720fabc75b5bb0bf"
+                    "275250b6ccbef2a99b4e0bfd953487ec"
+                ),
+            },
+        )
+
+    def test_host_update_stdin_previews_without_network_or_token_exposure(self):
+        sentinel = "SENSITIVE-ZABBIX-TOKEN"
+        params = {"hostid": "10105", "name": "Edge One"}
+        with fake_zabbix(lambda payload: rpc_result(payload, {})) as (server, url):
+            result = run_cli(
+                "hosts",
+                "update",
+                "--params-stdin",
+                env={
+                    **os.environ,
+                    "ZABBIX_API_URL": url,
+                    "ZABBIX_API_TOKEN": sentinel,
+                },
+                input_text=json.dumps(params),
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "dry_run": True,
+                "method": "host.update",
+                "params": params,
+                "sha256": load_module().mutation_digest("host.update", params),
+            },
+        )
+        self.assertEqual(server.requests, [])
+        self.assertNotIn(sentinel, result.stdout)
+        self.assertNotIn(sentinel, result.stderr)
+
+
+class MutationApplyGateTests(unittest.TestCase):
+    params = {"groups": [{"groupid": "2"}], "host": "edge-1"}
+    digest = "79a1738c95fcc3be720fabc75b5bb0bf275250b6ccbef2a99b4e0bfd953487ec"
+
+    def run_file_mutation(self, command, path, url, *gate_args, token="secret-token"):
+        return run_cli(
+            "hosts",
+            command,
+            "--params-file",
+            str(path),
+            *gate_args,
+            env={
+                **os.environ,
+                "ZABBIX_API_URL": url,
+                "ZABBIX_API_TOKEN": token,
+            },
+        )
+
+    def test_apply_without_confirmation_fails_before_network_access(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "payload.json"
+            path.write_text(json.dumps(self.params), encoding="utf-8")
+            with fake_zabbix(lambda payload: rpc_result(payload, "5.4.12")) as (
+                server,
+                url,
+            ):
+                result = self.run_file_mutation("create", path, url, "--apply")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("confirm-digest", result.stderr)
+        self.assertEqual(server.requests, [])
+
+    def test_confirmation_without_apply_is_invalid_before_network_access(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "payload.json"
+            path.write_text(json.dumps(self.params), encoding="utf-8")
+            with fake_zabbix(lambda payload: rpc_result(payload, "5.4.12")) as (
+                server,
+                url,
+            ):
+                result = self.run_file_mutation(
+                    "create", path, url, "--confirm-digest", self.digest
+                )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("--apply", result.stderr)
+        self.assertEqual(server.requests, [])
+
+    def test_malformed_digest_fails_before_network_access(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "payload.json"
+            path.write_text(json.dumps(self.params), encoding="utf-8")
+            with fake_zabbix(lambda payload: rpc_result(payload, "5.4.12")) as (
+                server,
+                url,
+            ):
+                result = self.run_file_mutation(
+                    "create",
+                    path,
+                    url,
+                    "--apply",
+                    "--confirm-digest",
+                    self.digest.upper(),
+                )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("lowercase", result.stderr)
+        self.assertEqual(server.requests, [])
+
+    def test_unmatched_method_or_params_digest_fails_before_network_access(self):
+        module = load_module()
+        wrong_digests = {
+            "different method": module.mutation_digest("host.update", self.params),
+            "changed params": module.mutation_digest(
+                "host.create", {**self.params, "host": "edge-2"}
+            ),
+        }
+        for description, digest in wrong_digests.items():
+            with self.subTest(description=description):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "payload.json"
+                    path.write_text(json.dumps(self.params), encoding="utf-8")
+                    with fake_zabbix(
+                        lambda payload: rpc_result(payload, "5.4.12")
+                    ) as (server, url):
+                        result = self.run_file_mutation(
+                            "create",
+                            path,
+                            url,
+                            "--apply",
+                            "--confirm-digest",
+                            digest,
+                        )
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("does not match", result.stderr)
+                self.assertEqual(server.requests, [])
+
+    def test_matching_digest_probes_version_then_applies_only_approved_mutation(self):
+        cases = {
+            "create": self.params,
+            "update": {"hostid": "10105", "name": "Edge One"},
+        }
+        module = load_module()
+        for command, params in cases.items():
+            with self.subTest(command=command):
+                method = f"host.{command}"
+                digest = module.mutation_digest(method, params)
+
+                def responder(payload):
+                    if payload["method"] == "apiinfo.version":
+                        return rpc_result(payload, "5.4.12")
+                    return rpc_result(payload, {"hostids": ["10105"]})
+
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "payload.json"
+                    path.write_text(json.dumps(params), encoding="utf-8")
+                    with fake_zabbix(responder) as (server, url):
+                        result = self.run_file_mutation(
+                            command,
+                            path,
+                            url,
+                            "--apply",
+                            "--confirm-digest",
+                            digest,
+                        )
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    json.loads(result.stdout), {"hostids": ["10105"]}
+                )
+                self.assertEqual(
+                    [request["method"] for request in server.requests],
+                    ["apiinfo.version", method],
+                )
+                self.assertNotIn("auth", server.requests[0])
+                operation = server.requests[1]
+                self.assertEqual(operation["auth"], "secret-token")
+                self.assertEqual(operation["params"], params)
+                self.assertNotIn("digest", operation)
+                self.assertNotIn("sha256", operation)
+                self.assertNotIn("confirm_digest", operation)
+
+    def test_live_errors_never_expose_token_or_response_body(self):
+        sentinel = "SENSITIVE-ZABBIX-TOKEN"
+        error_responses = {
+            "http 500": (500, {"detail": sentinel}),
+            "malformed JSON": (200, f"not-json-{sentinel}".encode()),
+            "JSON-RPC error": None,
+        }
+        for failing_stage in ("version", "mutation"):
+            for description, static_response in error_responses.items():
+                with self.subTest(stage=failing_stage, response=description):
+                    def responder(payload):
+                        is_failing_call = (
+                            failing_stage == "version"
+                            or payload["method"] != "apiinfo.version"
+                        )
+                        if not is_failing_call:
+                            return rpc_result(payload, "5.4.12")
+                        if static_response is not None:
+                            return static_response
+                        return 200, {
+                            "jsonrpc": "2.0",
+                            "error": {"code": -32602, "message": sentinel},
+                            "id": payload["id"],
+                        }
+
+                    with tempfile.TemporaryDirectory() as directory:
+                        path = Path(directory) / "payload.json"
+                        path.write_text(json.dumps(self.params), encoding="utf-8")
+                        with fake_zabbix(responder) as (_server, url):
+                            result = self.run_file_mutation(
+                                "create",
+                                path,
+                                url,
+                                "--apply",
+                                "--confirm-digest",
+                                self.digest,
+                                token=sentinel,
+                            )
+
+                    self.assertEqual(result.returncode, 1)
+                    self.assertNotIn(sentinel, result.stdout)
+                    self.assertNotIn(sentinel, result.stderr)
 
 
 class CurrentProblemTests(unittest.TestCase):
