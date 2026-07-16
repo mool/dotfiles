@@ -1,5 +1,6 @@
 import contextlib
 import importlib.util
+import http.client
 import io
 import json
 import os
@@ -102,6 +103,17 @@ class ParameterInputTests(unittest.TestCase):
         with self.assertRaisesRegex(module.SkillError, "only one"):
             module.load_json_params("params.json", True, io.StringIO("{}"))
 
+    def test_rejects_non_json_numeric_constants(self):
+        module = load_module()
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                with self.assertRaisesRegex(module.SkillError, "JSON"):
+                    module.load_json_params(
+                        None,
+                        True,
+                        io.StringIO('{"value": ' + constant + "}"),
+                    )
+
 
 class MutationShapeDigestTests(unittest.TestCase):
     def test_mutation_params_accept_object_or_nonempty_object_list(self):
@@ -129,6 +141,13 @@ class MutationShapeDigestTests(unittest.TestCase):
             module.mutation_digest("host.create", params),
             "79a1738c95fcc3be720fabc75b5bb0bf275250b6ccbef2a99b4e0bfd953487ec",
         )
+
+    def test_canonical_mutation_rejects_non_json_numeric_constants(self):
+        module = load_module()
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(module.SkillError, "JSON"):
+                    module.canonical_mutation("host.create", {"value": value})
 
 
 class MutationDryRunTests(unittest.TestCase):
@@ -188,6 +207,23 @@ class MutationDryRunTests(unittest.TestCase):
         )
         self.assertEqual(server.requests, [])
         self.assertNotIn(sentinel, result.stdout)
+        self.assertNotIn(sentinel, result.stderr)
+
+    def test_preview_rejects_configured_token_in_exact_params_without_live_config(self):
+        sentinel = "SENSITIVE-ZABBIX-TOKEN"
+        result = run_cli(
+            "hosts",
+            "create",
+            "--params-stdin",
+            env={"ZABBIX_API_TOKEN": sentinel},
+            input_text=json.dumps(
+                {"host": "edge-1", "macros": [{"value": sentinel}]}
+            ),
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn("ZABBIX_API_URL is required", result.stderr)
         self.assertNotIn(sentinel, result.stderr)
 
 
@@ -598,6 +634,37 @@ class ConfigurationTests(unittest.TestCase):
                 },
             )
 
+    def test_config_rejects_whitespace_and_controls_in_url_components(self):
+        zabbix_api = load_module()
+        invalid_urls = {
+            "hostname whitespace": "https://zabbix .example/api_jsonrpc.php",
+            "hostname control": "https://zabbix\x01.example/api_jsonrpc.php",
+            "path whitespace": "https://z.example/api jsonrpc.php",
+            "path control": "https://z.example/api\njsonrpc.php",
+            "query whitespace": "https://z.example/api_jsonrpc.php?name=bad value",
+            "query control": "https://z.example/api_jsonrpc.php?name=bad\x7fvalue",
+        }
+        for description, url in invalid_urls.items():
+            with self.subTest(description=description):
+                with self.assertRaisesRegex(
+                    zabbix_api.SkillError, "ZABBIX_API_URL"
+                ):
+                    zabbix_api.load_config(False, {"ZABBIX_API_URL": url})
+
+    def test_config_rejects_malformed_percent_escapes_in_url_components(self):
+        zabbix_api = load_module()
+        invalid_urls = {
+            "hostname": "https://zab%ZZ.example/api_jsonrpc.php",
+            "path": "https://z.example/api%2_jsonrpc.php",
+            "query": "https://z.example/api_jsonrpc.php?name=%GG",
+        }
+        for component, url in invalid_urls.items():
+            with self.subTest(component=component):
+                with self.assertRaisesRegex(
+                    zabbix_api.SkillError, "ZABBIX_API_URL"
+                ):
+                    zabbix_api.load_config(False, {"ZABBIX_API_URL": url})
+
     def test_authenticated_config_requires_token_without_exposing_it(self):
         zabbix_api = load_module()
         with self.assertRaisesRegex(zabbix_api.SkillError, "ZABBIX_API_TOKEN"):
@@ -749,6 +816,98 @@ class TransportTests(unittest.TestCase):
             with self.assertRaisesRegex(module.SkillError, "timed out"):
                 client.call("host.get", {}, authenticated=False)
 
+    def test_request_construction_failures_are_sanitized(self):
+        module = load_module()
+        secret = "SECRET-URL-CONTENTS"
+        client = module.ZabbixClient(
+            module.ApiConfig("https://z.example/api_jsonrpc.php", None, None)
+        )
+        failures = (
+            ("urllib.request.Request", ValueError(secret)),
+            ("urllib.request.urlopen", http.client.InvalidURL(secret)),
+        )
+        for target, failure in failures:
+            with self.subTest(target=target):
+                with mock.patch(target, side_effect=failure):
+                    with self.assertRaisesRegex(
+                        module.SkillError, "ZABBIX_API_URL"
+                    ) as raised:
+                        client.call("host.get", {}, authenticated=False)
+                self.assertNotIn(secret, str(raised.exception))
+
+    def test_request_serialization_rejects_non_json_numeric_constants(self):
+        module = load_module()
+        client = module.ZabbixClient(
+            module.ApiConfig("https://z.example/api_jsonrpc.php", None, None)
+        )
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                with mock.patch("urllib.request.urlopen") as urlopen:
+                    with self.assertRaisesRegex(module.SkillError, "JSON"):
+                        client.call("host.get", {"value": value}, False)
+                urlopen.assert_not_called()
+
+    def test_response_rejects_non_json_numeric_constants(self):
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                body = (
+                    '{"jsonrpc":"2.0","result":'
+                    + constant
+                    + ',"id":1}'
+                ).encode()
+                with fake_zabbix(lambda payload, body=body: (200, body)) as (
+                    _server,
+                    url,
+                ):
+                    module = load_module()
+                    client = module.ZabbixClient(module.ApiConfig(url, None, None))
+                    with self.assertRaisesRegex(module.SkillError, "JSON"):
+                        client.call("host.get", {}, authenticated=False)
+
+
+class SuccessfulOutputSecrecyTests(unittest.TestCase):
+    def test_successful_result_recursively_redacts_configured_token_as_valid_json(self):
+        sentinel = "SENSITIVE-ZABBIX-TOKEN"
+
+        def responder(payload):
+            if payload["method"] == "apiinfo.version":
+                return rpc_result(payload, "5.4.12")
+            return rpc_result(
+                payload,
+                {
+                    "direct": sentinel,
+                    "nested": [
+                        {"message": f"before-{sentinel}-after"},
+                        "safe",
+                    ],
+                },
+            )
+
+        with fake_zabbix(responder) as (_server, url):
+            result = run_cli(
+                "hosts",
+                "get",
+                env={
+                    **os.environ,
+                    "ZABBIX_API_URL": url,
+                    "ZABBIX_API_TOKEN": sentinel,
+                },
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(sentinel, result.stdout)
+        self.assertNotIn(sentinel, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "direct": "[REDACTED]",
+                "nested": [
+                    {"message": "before-[REDACTED]-after"},
+                    "safe",
+                ],
+            },
+        )
+
 
 class VersionPolicyTests(unittest.TestCase):
     def test_version_policy_accepts_5_4_rejects_older_and_warns_newer(self):
@@ -781,6 +940,62 @@ class VersionPolicyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), "6.0.0")
         self.assertIn("not verified", result.stderr)
+
+
+class CompatibilityWarningOrderingTests(unittest.TestCase):
+    @staticmethod
+    def responder(payload):
+        if payload["method"] == "apiinfo.version":
+            return rpc_result(payload, "6.0.0")
+        return 200, {
+            "jsonrpc": "2.0",
+            "error": {"code": -32602, "message": "operation failed"},
+            "id": payload["id"],
+        }
+
+    def assert_warning_precedes_operation_error(self, result):
+        self.assertEqual(result.returncode, 1)
+        lines = result.stderr.splitlines()
+        self.assertEqual(sum("warning:" in line for line in lines), 1)
+        self.assertGreaterEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("warning:"), lines)
+        self.assertTrue(lines[-1].startswith("error:"), lines)
+
+    def test_newer_version_warning_precedes_failed_authenticated_read(self):
+        with fake_zabbix(self.responder) as (_server, url):
+            result = run_cli(
+                "hosts",
+                "get",
+                env={
+                    **os.environ,
+                    "ZABBIX_API_URL": url,
+                    "ZABBIX_API_TOKEN": "secret-token",
+                },
+            )
+        self.assert_warning_precedes_operation_error(result)
+
+    def test_newer_version_warning_precedes_failed_authenticated_apply(self):
+        params = {"host": "edge-1", "groups": [{"groupid": "2"}]}
+        digest = load_module().mutation_digest("host.create", params)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "params.json"
+            path.write_text(json.dumps(params), encoding="utf-8")
+            with fake_zabbix(self.responder) as (_server, url):
+                result = run_cli(
+                    "hosts",
+                    "create",
+                    "--params-file",
+                    str(path),
+                    "--apply",
+                    "--confirm-digest",
+                    digest,
+                    env={
+                        **os.environ,
+                        "ZABBIX_API_URL": url,
+                        "ZABBIX_API_TOKEN": "secret-token",
+                    },
+                )
+        self.assert_warning_precedes_operation_error(result)
 
 
 if __name__ == "__main__":

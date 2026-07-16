@@ -3,10 +3,13 @@
 import argparse
 import hashlib
 import hmac
+import http.client
 import json
 import os
+import re
 import ssl
 import sys
+import unicodedata
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -30,6 +33,11 @@ def load_config(require_token: bool, env: Mapping[str, str]) -> ApiConfig:
     url = env.get("ZABBIX_API_URL", "").strip()
     if not url:
         raise SkillError("ZABBIX_API_URL is required")
+    if any(
+        character.isspace() or unicodedata.category(character) == "Cc"
+        for character in url
+    ) or re.search(r"%(?![0-9A-Fa-f]{2})", url):
+        raise SkillError("ZABBIX_API_URL must be a valid URL")
 
     try:
         parsed_url = urlsplit(url)
@@ -66,6 +74,10 @@ def build_ssl_context(config: ApiConfig) -> ssl.SSLContext | None:
     return None
 
 
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"invalid JSON numeric constant: {value}")
+
+
 def _load_json_input(path: str | None, use_stdin: bool, stdin: TextIO) -> object:
     if path is not None and use_stdin:
         raise SkillError("use only one parameter input source")
@@ -76,9 +88,9 @@ def _load_json_input(path: str | None, use_stdin: bool, stdin: TextIO) -> object
     try:
         if path is not None:
             with open(path, encoding="utf-8") as params_file:
-                return json.load(params_file)
-        return json.load(stdin)
-    except (OSError, UnicodeError, json.JSONDecodeError):
+                return json.load(params_file, parse_constant=_reject_json_constant)
+        return json.load(stdin, parse_constant=_reject_json_constant)
+    except (OSError, UnicodeError, ValueError):
         raise SkillError(f"could not load JSON parameters from {source}") from None
 
 
@@ -117,22 +129,32 @@ class ZabbixClient:
                 raise SkillError("ZABBIX_API_TOKEN is required")
             payload["auth"] = self.config.token
 
-        request = urllib.request.Request(
-            self.config.url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json-rpc"},
-            method="POST",
-        )
+        try:
+            request_body = json.dumps(payload, allow_nan=False).encode("utf-8")
+        except (TypeError, ValueError, UnicodeError):
+            raise SkillError("could not serialize JSON-RPC request as valid JSON") from None
+        try:
+            request = urllib.request.Request(
+                self.config.url,
+                data=request_body,
+                headers={"Content-Type": "application/json-rpc"},
+                method="POST",
+            )
+            context = build_ssl_context(self.config)
+        except (http.client.InvalidURL, TypeError, ValueError, UnicodeError):
+            raise SkillError("ZABBIX_API_URL could not be used for a request") from None
         try:
             with urllib.request.urlopen(
                 request,
                 timeout=30,
-                context=build_ssl_context(self.config),
+                context=context,
             ) as response:
                 response_body = response.read()
         except urllib.error.HTTPError as error:
             error.close()
             raise SkillError(f"Zabbix API returned HTTP {error.code}") from None
+        except (http.client.InvalidURL, ValueError, UnicodeError):
+            raise SkillError("ZABBIX_API_URL could not be used for a request") from None
         except urllib.error.URLError as error:
             if isinstance(error.reason, TimeoutError):
                 raise SkillError("Zabbix API request timed out") from None
@@ -143,8 +165,10 @@ class ZabbixClient:
             raise SkillError("could not connect to Zabbix API") from None
 
         try:
-            response_payload = json.loads(response_body)
-        except (json.JSONDecodeError, UnicodeDecodeError):
+            response_payload = json.loads(
+                response_body, parse_constant=_reject_json_constant
+            )
+        except (ValueError, UnicodeDecodeError):
             raise SkillError("Zabbix API returned malformed JSON") from None
 
         if not isinstance(response_payload, dict):
@@ -177,12 +201,16 @@ def validate_mutation_params(
 
 def canonical_mutation(method: str, params: object) -> bytes:
     validated_params = validate_mutation_params(params)
-    return json.dumps(
-        {"method": method, "params": validated_params},
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
+    try:
+        return json.dumps(
+            {"method": method, "params": validated_params},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeError):
+        raise SkillError("mutation parameters must contain valid JSON values") from None
 
 
 def mutation_digest(method: str, params: object) -> str:
@@ -197,6 +225,51 @@ def mutation_preview(method: str, params: object) -> dict[str, object]:
         "params": validated_params,
         "sha256": mutation_digest(method, validated_params),
     }
+
+
+def _contains_token(value: object, token: str) -> bool:
+    if isinstance(value, str):
+        return token in value
+    if isinstance(value, list):
+        return any(_contains_token(item, token) for item in value)
+    if isinstance(value, dict):
+        return any(
+            _contains_token(key, token) or _contains_token(item, token)
+            for key, item in value.items()
+        )
+    return False
+
+
+def _redact_token(value: object, token: str | None) -> object:
+    if not token:
+        return value
+    if isinstance(value, str):
+        return value.replace(token, "[REDACTED]")
+    if isinstance(value, list):
+        return [_redact_token(item, token) for item in value]
+    if isinstance(value, dict):
+        return {
+            _redact_token(key, token): _redact_token(item, token)
+            for key, item in value.items()
+        }
+    return value
+
+
+def _print_json(value: object, token: str | None) -> None:
+    try:
+        output = json.dumps(
+            _redact_token(value, token),
+            indent=2,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError, UnicodeError):
+        raise SkillError("could not serialize output as valid JSON") from None
+    print(output)
+
+
+def _print_warning(warning: str | None) -> None:
+    if warning is not None:
+        print(f"warning: {warning}", file=sys.stderr, flush=True)
 
 
 def current_problem_params(extra: Mapping[str, object]) -> dict[str, object]:
@@ -336,10 +409,15 @@ def main(
             params = load_mutation_params(
                 args.params_file, args.params_stdin, sys.stdin
             )
+            token = environment.get("ZABBIX_API_TOKEN", "").strip()
+            if token and _contains_token(params, token):
+                raise SkillError(
+                    "mutation parameters must not contain ZABBIX_API_TOKEN"
+                )
             if args.confirm_digest is not None and not args.apply:
                 raise SkillError("--confirm-digest requires --apply")
             if not args.apply:
-                print(json.dumps(mutation_preview(method, params), indent=2))
+                _print_json(mutation_preview(method, params), token)
                 return 0
             if args.confirm_digest is None:
                 raise SkillError("--apply requires --confirm-digest")
@@ -358,10 +436,9 @@ def main(
             client = ZabbixClient(config)
             version = client.version()
             warning = check_supported_version(version)
+            _print_warning(warning)
             result = client.call(method, params, authenticated=True)
-            print(json.dumps(result, indent=2))
-            if warning is not None:
-                print(f"warning: {warning}", file=sys.stderr)
+            _print_json(result, config.token)
             return 0
 
         require_token = args.command != "version"
@@ -379,20 +456,21 @@ def main(
                 params = historical_problem_params(args.since, args.until, extra)
             version = client.version()
             warning = check_supported_version(version)
+            _print_warning(warning)
             result = client.call(method, params, authenticated=True)
         else:
             extra = load_json_params(args.params_file, False, sys.stdin)
             version = client.version()
             warning = check_supported_version(version)
+            _print_warning(warning)
             result = client.call(
                 "host.get", host_query_params(extra), authenticated=True
             )
 
         if args.command == "version":
             warning = check_supported_version(result)
-        print(json.dumps(result, indent=2))
-        if warning is not None:
-            print(f"warning: {warning}", file=sys.stderr)
+            _print_warning(warning)
+        _print_json(result, config.token)
         return 0
     except SkillError as error:
         message = str(error)
