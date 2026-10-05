@@ -1,3 +1,4 @@
+onboarding = false
 # herdr configuration
 # Place this file at ~/.config/herdr/config.toml
 
@@ -267,6 +268,7 @@ description = "clear focused shell screen"
 # accent = "cyan"
 
 # Background notification popup delivery
+status_indicators = "symbols"
 [ui.toast]
 # off = disable pop-up notifications
 # herdr = show in-app toasts
@@ -275,6 +277,7 @@ description = "clear focused shell screen"
 # delivery = "off"
 # delay_seconds = 1
 
+delivery = "system"
 [ui.toast.herdr]
 # position = "bottom-right"
 
